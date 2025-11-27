@@ -34,6 +34,45 @@ class HealthDataReader {
         self.characteristicsTypesDict = characteristicsTypesDict
     }
 
+    private func appendDeviceInfo(to dictionary: inout [String: Any], sample: HKSample) {
+        guard let deviceModel = deviceModel(from: sample) else { return }
+        dictionary["device_model"] = deviceModel
+    }
+
+    private func deviceModel(from sample: HKSample) -> String? {
+        if let device = sample.device {
+            let manufacturer = device.manufacturer?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let model = device.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = device.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hardware = device.hardwareVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            let manufacturerModel = [manufacturer, model].compactMap { $0 }.filter { !$0.isEmpty }
+            if !manufacturerModel.isEmpty {
+                return manufacturerModel.joined(separator: " ")
+            }
+            if let name = name, !name.isEmpty {
+                return name
+            }
+            if let model = model, !model.isEmpty {
+                return model
+            }
+            if let hardware = hardware, !hardware.isEmpty {
+                if let model = model, !model.isEmpty {
+                    return "\(model) \(hardware)"
+                }
+                return hardware
+            }
+        }
+        if #available(iOS 14.0, *) {
+            if let productType = sample.sourceRevision.productType,
+                !productType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                return productType
+            }
+        }
+        return nil
+    }
+
     /// Gets health data
     /// - Parameters:
     ///   - call: Flutter method call
@@ -305,7 +344,7 @@ class HealthDataReader {
                     let mealType = food.metadata?["HKFoodMeal"]
                     let samples = food.objects
                     if let sample = samples.first as? HKQuantitySample {
-                        var sampleDict = [
+                        var sampleDict: [String: Any?] = [
                             "uuid": "\(sample.uuid)",
                             "name": name,
                             "meal_type": mealType,
@@ -318,6 +357,9 @@ class HealthDataReader {
                                 ? HealthConstants.RecordingMethod.manual.rawValue
                                 : HealthConstants.RecordingMethod.automatic.rawValue,
                         ]
+                        if let deviceModel = self.deviceModel(from: sample) {
+                            sampleDict["device_model"] = deviceModel
+                        }
                         for sample in samples {
                             if let quantitySample = sample as? HKQuantitySample {
                                 for (key, identifier) in HealthConstants.NUTRITION_KEYS {
@@ -584,7 +626,7 @@ class HealthDataReader {
                     let mealType = food.metadata?["HKFoodMeal"]
                     let samples = food.objects
                     if let sample = samples.first as? HKQuantitySample {
-                        var sampleDict = [
+                        var sampleDict: [String: Any?] = [
                             "uuid": "\(sample.uuid)",
                             "name": name,
                             "meal_type": mealType,
@@ -597,6 +639,9 @@ class HealthDataReader {
                                 ? HealthConstants.RecordingMethod.manual.rawValue
                                 : HealthConstants.RecordingMethod.automatic.rawValue,
                         ]
+                        if let deviceModel = self.deviceModel(from: sample) {
+                            sampleDict["device_model"] = deviceModel
+                        }
                         for sample in samples {
                             if let quantitySample = sample as? HKQuantitySample {
                                 for (key, identifier) in HealthConstants.NUTRITION_KEYS {
@@ -978,6 +1023,8 @@ class HealthDataReader {
         if let workoutUUID = metadata["workout_uuid"] as? String {
             dictionary["workout_uuid"] = workoutUUID
         }
+
+        appendDeviceInfo(to: &dictionary, sample: route)
 
         return dictionary
     }

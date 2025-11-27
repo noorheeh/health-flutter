@@ -369,6 +369,7 @@ class HealthDataReader(
             "source_name" to session.metadata.dataOrigin.packageName,
             "recording_method" to session.metadata.recordingMethod,
             "metadata" to metadata,
+            "device_model" to session.metadata.deviceLabel(),
         )
     }
 
@@ -391,6 +392,7 @@ class HealthDataReader(
             "source_name" to session.metadata.dataOrigin.packageName,
             "recording_method" to session.metadata.recordingMethod,
             "metadata" to metadata,
+            "device_model" to session.metadata.deviceLabel(),
         )
     }
 
