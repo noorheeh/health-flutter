@@ -144,20 +144,20 @@ class HealthDataReader {
         }
 
         // Ensure device_model has a value for backwards compatibility
-        // Priority: manufacturer + model > model > name > productType
+        // Priority: model > name > productType, then combine with manufacturer if available
         if info["device_model"] == nil {
-            if let manufacturer = info["device_manufacturer"],
-               let model = info["device_model"] {
-                info["device_model"] = "\(manufacturer) \(model)"
-            } else if let name = info["device_name"] {
+            // Fallback to other identifiers if model is not available
+            if let name = info["device_name"] {
                 info["device_model"] = name
             } else if let productType = info["source_product_type"] {
                 info["device_model"] = productType
             }
-        } else if let manufacturer = info["device_manufacturer"],
-                  let model = info["device_model"],
-                  !model.contains(manufacturer) {
-            // Combine manufacturer + model if not already combined
+        }
+
+        // Combine manufacturer + model if both available and not already combined
+        if let manufacturer = info["device_manufacturer"],
+           let model = info["device_model"],
+           !model.contains(manufacturer) {
             info["device_model"] = "\(manufacturer) \(model)"
         }
 

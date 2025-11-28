@@ -56,9 +56,59 @@ class HealthDataPoint {
   Map<String, dynamic>? metadata;
 
   /// The source of the data, whether from the iPhone or Watch or something else.
-  /// Only available fo iOS
+  /// Only available for iOS
   /// On Android: always return null
   String? deviceModel;
+
+  /// The manufacturer of the device (e.g., "Apple")
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceManufacturer;
+
+  /// The name of the device (e.g., "John's iPhone")
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceName;
+
+  /// The hardware version of the device
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceHardwareVersion;
+
+  /// The firmware version of the device (useful for external devices like Apple Watch)
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceFirmwareVersion;
+
+  /// The software version of the device
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceSoftwareVersion;
+
+  /// The local identifier of the device (private to your app)
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceLocalIdentifier;
+
+  /// The UDI (Universal Device Identifier) for medical devices
+  /// Only available for iOS
+  /// On Android: always return null
+  String? deviceUdiIdentifier;
+
+  /// The product type from source revision (e.g., "iPhone18,1")
+  /// Only available for iOS 11+
+  /// On Android: always return null
+  String? sourceProductType;
+
+  /// The operating system version from source revision (e.g., "18.1.0")
+  /// Only available for iOS 11+
+  /// On Android: always return null
+  String? sourceOsVersion;
+
+  /// The app/source version that recorded the data
+  /// Only available for iOS 11+
+  /// On Android: always return null
+  String? sourceVersion;
 
   HealthDataPoint({
     required this.uuid,
@@ -75,6 +125,16 @@ class HealthDataPoint {
     this.workoutSummary,
     this.metadata,
     this.deviceModel,
+    this.deviceManufacturer,
+    this.deviceName,
+    this.deviceHardwareVersion,
+    this.deviceFirmwareVersion,
+    this.deviceSoftwareVersion,
+    this.deviceLocalIdentifier,
+    this.deviceUdiIdentifier,
+    this.sourceProductType,
+    this.sourceOsVersion,
+    this.sourceVersion,
   }) {
     // set the value to minutes rather than the category
     // returned by the native API
@@ -134,6 +194,16 @@ class HealthDataPoint {
     );
     final String? uuid = dataPoint["uuid"] as String?;
     final String? deviceModel = dataPoint["device_model"] as String?;
+    final String? deviceManufacturer = dataPoint["device_manufacturer"] as String?;
+    final String? deviceName = dataPoint["device_name"] as String?;
+    final String? deviceHardwareVersion = dataPoint["device_hardware_version"] as String?;
+    final String? deviceFirmwareVersion = dataPoint["device_firmware_version"] as String?;
+    final String? deviceSoftwareVersion = dataPoint["device_software_version"] as String?;
+    final String? deviceLocalIdentifier = dataPoint["device_local_identifier"] as String?;
+    final String? deviceUdiIdentifier = dataPoint["device_udi_identifier"] as String?;
+    final String? sourceProductType = dataPoint["source_product_type"] as String?;
+    final String? sourceOsVersion = dataPoint["source_os_version"] as String?;
+    final String? sourceVersion = dataPoint["source_version"] as String?;
 
     // Set WorkoutSummary, if available.
     WorkoutSummary? workoutSummary;
@@ -161,6 +231,16 @@ class HealthDataPoint {
       workoutSummary: workoutSummary,
       metadata: metadata,
       deviceModel: deviceModel,
+      deviceManufacturer: deviceManufacturer,
+      deviceName: deviceName,
+      deviceHardwareVersion: deviceHardwareVersion,
+      deviceFirmwareVersion: deviceFirmwareVersion,
+      deviceSoftwareVersion: deviceSoftwareVersion,
+      deviceLocalIdentifier: deviceLocalIdentifier,
+      deviceUdiIdentifier: deviceUdiIdentifier,
+      sourceProductType: sourceProductType,
+      sourceOsVersion: sourceOsVersion,
+      sourceVersion: sourceVersion,
     );
   }
 
@@ -180,7 +260,17 @@ class HealthDataPoint {
     recordingMethod: $recordingMethod
     workoutSummary: $workoutSummary
     metadata: $metadata
-    deviceModel: $deviceModel""";
+    deviceModel: $deviceModel
+    deviceManufacturer: $deviceManufacturer
+    deviceName: $deviceName
+    deviceHardwareVersion: $deviceHardwareVersion
+    deviceFirmwareVersion: $deviceFirmwareVersion
+    deviceSoftwareVersion: $deviceSoftwareVersion
+    deviceLocalIdentifier: $deviceLocalIdentifier
+    deviceUdiIdentifier: $deviceUdiIdentifier
+    sourceProductType: $sourceProductType
+    sourceOsVersion: $sourceOsVersion
+    sourceVersion: $sourceVersion""";
 
   @override
   bool operator ==(Object other) =>
@@ -197,10 +287,20 @@ class HealthDataPoint {
       sourceName == other.sourceName &&
       recordingMethod == other.recordingMethod &&
       metadata == other.metadata &&
-      deviceModel == other.deviceModel;
+      deviceModel == other.deviceModel &&
+      deviceManufacturer == other.deviceManufacturer &&
+      deviceName == other.deviceName &&
+      deviceHardwareVersion == other.deviceHardwareVersion &&
+      deviceFirmwareVersion == other.deviceFirmwareVersion &&
+      deviceSoftwareVersion == other.deviceSoftwareVersion &&
+      deviceLocalIdentifier == other.deviceLocalIdentifier &&
+      deviceUdiIdentifier == other.deviceUdiIdentifier &&
+      sourceProductType == other.sourceProductType &&
+      sourceOsVersion == other.sourceOsVersion &&
+      sourceVersion == other.sourceVersion;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     uuid,
     value,
     unit,
@@ -213,5 +313,15 @@ class HealthDataPoint {
     sourceName,
     metadata,
     deviceModel,
-  );
+    deviceManufacturer,
+    deviceName,
+    deviceHardwareVersion,
+    deviceFirmwareVersion,
+    deviceSoftwareVersion,
+    deviceLocalIdentifier,
+    deviceUdiIdentifier,
+    sourceProductType,
+    sourceOsVersion,
+    sourceVersion,
+  ]);
 }
