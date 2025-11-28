@@ -34,43 +34,139 @@ class HealthDataReader {
         self.characteristicsTypesDict = characteristicsTypesDict
     }
 
-    private func appendDeviceInfo(to dictionary: inout [String: Any], sample: HKSample) {
-        guard let deviceModel = deviceModel(from: sample) else { return }
-        dictionary["device_model"] = deviceModel
+    private func appendDeviceInfo(to dictionary: inout [String: Any?], sample: HKSample) {
+        let deviceInfo = extractDeviceInfo(from: sample)
+
+        // Add device_model for backwards compatibility (primary identifier)
+        if let deviceModel = deviceInfo["device_model"] as? String {
+            dictionary["device_model"] = deviceModel
+        }
+
+        // Add all comprehensive device information
+        if let manufacturer = deviceInfo["device_manufacturer"] as? String {
+            dictionary["device_manufacturer"] = manufacturer
+        }
+        if let name = deviceInfo["device_name"] as? String {
+            dictionary["device_name"] = name
+        }
+        if let hardwareVersion = deviceInfo["device_hardware_version"] as? String {
+            dictionary["device_hardware_version"] = hardwareVersion
+        }
+        if let firmwareVersion = deviceInfo["device_firmware_version"] as? String {
+            dictionary["device_firmware_version"] = firmwareVersion
+        }
+        if let softwareVersion = deviceInfo["device_software_version"] as? String {
+            dictionary["device_software_version"] = softwareVersion
+        }
+        if let localIdentifier = deviceInfo["device_local_identifier"] as? String {
+            dictionary["device_local_identifier"] = localIdentifier
+        }
+        if let udiIdentifier = deviceInfo["device_udi_identifier"] as? String {
+            dictionary["device_udi_identifier"] = udiIdentifier
+        }
+        if let productType = deviceInfo["source_product_type"] as? String {
+            dictionary["source_product_type"] = productType
+        }
+        if let osVersion = deviceInfo["source_os_version"] as? String {
+            dictionary["source_os_version"] = osVersion
+        }
+        if let sourceVersion = deviceInfo["source_version"] as? String {
+            dictionary["source_version"] = sourceVersion
+        }
     }
 
-    private func deviceModel(from sample: HKSample) -> String? {
-        if let device = sample.device {
-            let manufacturer = device.manufacturer?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let model = device.model?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let name = device.name?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let hardware = device.hardwareVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Extracts comprehensive device information from a HealthKit sample
+    /// Returns all available device properties from HKDevice and HKSourceRevision
+    private func extractDeviceInfo(from sample: HKSample) -> [String: String] {
+        var info: [String: String] = [:]
 
-            let manufacturerModel = [manufacturer, model].compactMap { $0 }.filter { !$0.isEmpty }
-            if !manufacturerModel.isEmpty {
-                return manufacturerModel.joined(separator: " ")
+        // Extract HKDevice properties
+        if let device = sample.device {
+            if let manufacturer = device.manufacturer?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !manufacturer.isEmpty {
+                info["device_manufacturer"] = manufacturer
             }
-            if let name = name, !name.isEmpty {
-                return name
+
+            if let model = device.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !model.isEmpty {
+                info["device_model"] = model
             }
-            if let model = model, !model.isEmpty {
-                return model
+
+            if let name = device.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !name.isEmpty {
+                info["device_name"] = name
             }
-            if let hardware = hardware, !hardware.isEmpty {
-                if let model = model, !model.isEmpty {
-                    return "\(model) \(hardware)"
-                }
-                return hardware
+
+            if let hardwareVersion = device.hardwareVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !hardwareVersion.isEmpty {
+                info["device_hardware_version"] = hardwareVersion
+            }
+
+            if let firmwareVersion = device.firmwareVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !firmwareVersion.isEmpty {
+                info["device_firmware_version"] = firmwareVersion
+            }
+
+            if let softwareVersion = device.softwareVersion?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !softwareVersion.isEmpty {
+                info["device_software_version"] = softwareVersion
+            }
+
+            if let localIdentifier = device.localIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !localIdentifier.isEmpty {
+                info["device_local_identifier"] = localIdentifier
+            }
+
+            if let udiIdentifier = device.udiDeviceIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !udiIdentifier.isEmpty {
+                info["device_udi_identifier"] = udiIdentifier
             }
         }
-        if #available(iOS 14.0, *) {
-            if let productType = sample.sourceRevision.productType,
-                !productType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                return productType
+
+        // Extract HKSourceRevision properties (iOS 11+)
+        if #available(iOS 11.0, *) {
+            let sourceRevision = sample.sourceRevision
+
+            if let productType = sourceRevision.productType?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !productType.isEmpty {
+                info["source_product_type"] = productType
+            }
+
+            if let version = sourceRevision.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !version.isEmpty {
+                info["source_version"] = version
+            }
+
+            let osVersion = sourceRevision.operatingSystemVersion
+            if osVersion.majorVersion > 0 {
+                info["source_os_version"] = "\(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
             }
         }
-        return nil
+
+        // Ensure device_model has a value for backwards compatibility
+        // Priority: manufacturer + model > model > name > productType
+        if info["device_model"] == nil {
+            if let manufacturer = info["device_manufacturer"],
+               let model = info["device_model"] {
+                info["device_model"] = "\(manufacturer) \(model)"
+            } else if let name = info["device_name"] {
+                info["device_model"] = name
+            } else if let productType = info["source_product_type"] {
+                info["device_model"] = productType
+            }
+        } else if let manufacturer = info["device_manufacturer"],
+                  let model = info["device_model"],
+                  !model.contains(manufacturer) {
+            // Combine manufacturer + model if not already combined
+            info["device_model"] = "\(manufacturer) \(model)"
+        }
+
+        return info
+    }
+
+    /// Legacy method for backwards compatibility - returns primary device identifier
+    private func deviceModel(from sample: HKSample) -> String? {
+        return extractDeviceInfo(from: sample)["device_model"]
     }
 
     /// Gets health data
@@ -226,9 +322,7 @@ class HealthDataReader {
                         "dataUnitKey": unit?.unitString,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -277,9 +371,7 @@ class HealthDataReader {
                             : HealthConstants.RecordingMethod.automatic.rawValue,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -312,9 +404,7 @@ class HealthDataReader {
                             ? Int(sample.totalEnergyBurned!.doubleValue(for: HKUnit.kilocalorie()))
                             : 0,
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
 
@@ -345,9 +435,7 @@ class HealthDataReader {
                         "source_id": sample.sourceRevision.source.bundleIdentifier,
                         "source_name": sample.sourceRevision.source.name,
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -373,9 +461,7 @@ class HealthDataReader {
                                 ? HealthConstants.RecordingMethod.manual.rawValue
                                 : HealthConstants.RecordingMethod.automatic.rawValue,
                         ]
-                        if let deviceModel = self.deviceModel(from: sample) {
-                            sampleDict["device_model"] = deviceModel
-                        }
+                        self.appendDeviceInfo(to: &sampleDict, sample: sample)
                         for sample in samples {
                             if let quantitySample = sample as? HKQuantitySample {
                                 for (key, identifier) in HealthConstants.NUTRITION_KEYS {
@@ -524,9 +610,7 @@ class HealthDataReader {
                         "dataUnitKey": unit?.unitString,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -575,9 +659,7 @@ class HealthDataReader {
                             : HealthConstants.RecordingMethod.automatic.rawValue,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -610,9 +692,7 @@ class HealthDataReader {
                             ? Int(sample.totalEnergyBurned!.doubleValue(for: HKUnit.kilocalorie()))
                             : 0,
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
 
@@ -643,9 +723,7 @@ class HealthDataReader {
                         "source_id": sample.sourceRevision.source.bundleIdentifier,
                         "source_name": sample.sourceRevision.source.name,
                     ]
-                    if let deviceModel = self.deviceModel(from: sample) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: sample)
                     return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
@@ -671,9 +749,7 @@ class HealthDataReader {
                                 ? HealthConstants.RecordingMethod.manual.rawValue
                                 : HealthConstants.RecordingMethod.automatic.rawValue,
                         ]
-                        if let deviceModel = self.deviceModel(from: sample) {
-                            sampleDict["device_model"] = deviceModel
-                        }
+                        self.appendDeviceInfo(to: &sampleDict, sample: sample)
                         for sample in samples {
                             if let quantitySample = sample as? HKQuantitySample {
                                 for (key, identifier) in HealthConstants.NUTRITION_KEYS {
@@ -1038,7 +1114,7 @@ class HealthDataReader {
         var metadata = HealthUtilities.sanitizeMetadata(route.metadata) ?? [:]
         metadata["route_point_count"] = routePoints.count
 
-        var dictionary: [String: Any] = [
+        var dictionary: [String: Any?] = [
             "uuid": "\(route.uuid)",
             "route": routePoints,
             "date_from": startTimestamp,
@@ -1147,9 +1223,7 @@ class HealthDataReader {
                         "source_id": ecg.sourceRevision.source.bundleIdentifier,
                         "source_name": ecg.sourceRevision.source.name,
                     ]
-                    if let deviceModel = self.deviceModel(from: ecg) {
-                        dict["device_model"] = deviceModel
-                    }
+                    self.appendDeviceInfo(to: &dict, sample: ecg)
                     lock.lock()
                     dictionaries.append(dict as NSDictionary)
                     lock.unlock()
