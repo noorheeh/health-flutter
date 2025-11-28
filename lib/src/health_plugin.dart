@@ -38,10 +38,13 @@ part of '../health.dart';
 /// or getter methods. Otherwise, the plugin will throw an exception.
 class Health {
   static const MethodChannel _channel = MethodChannel('flutter_health');
+  static const EventChannel _observerChannel = EventChannel('flutter_health/observer');
 
   String? _deviceId;
   final DeviceInfoPlugin _deviceInfo;
   HealthConnectSdkStatus _healthConnectSdkStatus = HealthConnectSdkStatus.sdkUnavailable;
+  StreamSubscription<dynamic>? _observerSubscription;
+  StreamController<HealthObserverUpdate>? _observerController;
 
   /// Get an instance of the health plugin.
   Health({DeviceInfoPlugin? deviceInfo}) : _deviceInfo = deviceInfo ?? DeviceInfoPlugin() {
@@ -1603,6 +1606,191 @@ class Health {
       HealthWorkoutActivityType.OTHER,
     }.contains(type);
   }
+
+  // MARK: - Health Data Observer (iOS only)
+
+  /// Observe real-time changes to health data (iOS only).
+  ///
+  /// Returns a stream of [HealthObserverUpdate] events when health data changes.
+  /// This uses HKObserverQuery on iOS to receive notifications when new health data
+  /// is available. You must still call [getHealthDataFromTypes] to fetch the actual data.
+  ///
+  /// **Important:** This feature is only available on iOS. On Android, the stream will
+  /// emit an error and close.
+  ///
+  /// Parameters:
+  ///  * [types] - List of [HealthDataType] to observe for changes
+  ///  * [enableBackground] - Whether to receive updates when app is in background (iOS only)
+  ///    Requires background modes to be enabled in your iOS app.
+  ///
+  /// Returns a Stream of [HealthObserverUpdate] events containing:
+  ///  * [type] - The event type (update, error, background_delivery_enabled, etc.)
+  ///  * [dataType] - The health data type that changed
+  ///  * [timestamp] - When the change occurred
+  ///  * [error] - Error message if type is 'error'
+  ///
+  /// Example:
+  /// ```dart
+  /// final health = Health();
+  ///
+  /// health.observeHealthData(
+  ///   types: [HealthDataType.STEPS, HealthDataType.HEART_RATE],
+  ///   enableBackground: true,
+  /// ).listen((update) {
+  ///   if (update.type == HealthObserverEventType.update) {
+  ///     print('New ${update.dataType} data available');
+  ///     // Fetch the actual data using getHealthDataFromTypes()
+  ///   }
+  /// });
+  /// ```
+  Stream<HealthObserverUpdate> observeHealthData({
+    required List<HealthDataType> types,
+    bool enableBackground = false,
+  }) {
+    if (!Platform.isIOS) {
+      return Stream.error(
+        PlatformException(
+          code: 'PLATFORM_NOT_SUPPORTED',
+          message: 'Health data observation is only supported on iOS',
+        ),
+      );
+    }
+
+    // Cancel any existing observation to avoid multiple native subscriptions
+    stopObservingHealthData();
+
+    final dataTypeKeys = types.map((type) => type.name).toList();
+
+    final nativeStream = _observerChannel
+        .receiveBroadcastStream({
+      'dataTypeKeys': dataTypeKeys,
+      'enableBackground': enableBackground,
+    }).map(
+      (event) => HealthObserverUpdate._fromMap(
+        Map<String, dynamic>.from(event as Map),
+      ),
+    );
+
+    final controller = StreamController<HealthObserverUpdate>.broadcast();
+    _observerController = controller;
+
+    _observerSubscription = nativeStream.listen(
+      controller.add,
+      onError: controller.addError,
+      onDone: () {
+        if (identical(_observerController, controller)) {
+          controller.close();
+          _observerController = null;
+        }
+        _observerSubscription = null;
+      },
+    );
+
+    controller.onCancel = () {
+      if (identical(_observerController, controller)) {
+        stopObservingHealthData();
+      }
+    };
+
+    return controller.stream;
+  }
+
+  /// Stop observing health data changes.
+  ///
+  /// Call this when you no longer need to receive health data updates.
+  /// This cancels the observation stream and cleans up native resources.
+  ///
+  /// Note: You can also cancel the stream subscription directly if you kept a reference to it.
+  void stopObservingHealthData() {
+    _observerSubscription?.cancel();
+    _observerSubscription = null;
+
+    final controller = _observerController;
+    _observerController = null;
+    controller?.close();
+  }
+}
+
+/// Event types for health data observer
+enum HealthObserverEventType {
+  /// New health data is available
+  update,
+
+  /// An error occurred during observation
+  error,
+
+  /// Background delivery was enabled successfully
+  backgroundDeliveryEnabled,
+
+  /// An error occurred while enabling background delivery
+  backgroundDeliveryError,
+}
+
+/// Represents an update from the health data observer
+class HealthObserverUpdate {
+  /// The type of event
+  final HealthObserverEventType type;
+
+  /// The health data type that changed (for update, error, and background events)
+  final HealthDataType? dataType;
+
+  /// Timestamp when the change occurred (milliseconds since epoch)
+  final int? timestamp;
+
+  /// Error message (only present when type is error or backgroundDeliveryError)
+  final String? error;
+
+  HealthObserverUpdate._({
+    required this.type,
+    this.dataType,
+    this.timestamp,
+    this.error,
+  });
+
+  factory HealthObserverUpdate._fromMap(Map<String, dynamic> map) {
+    final typeString = map['type'] as String;
+    final dataTypeKey = map['dataTypeKey'] as String?;
+
+    // Parse event type
+    final eventType = _parseEventType(typeString);
+
+    // Parse data type if available
+    HealthDataType? dataType;
+    if (dataTypeKey != null) {
+      try {
+        dataType = HealthDataType.values.firstWhere(
+          (type) => type.name == dataTypeKey,
+        );
+      } catch (_) {
+        // If parsing fails, dataType remains null
+      }
+    }
+
+    return HealthObserverUpdate._(
+      type: eventType,
+      dataType: dataType,
+      timestamp: map['timestamp'] as int?,
+      error: map['error'] as String?,
+    );
+  }
+
+  static HealthObserverEventType _parseEventType(String typeString) {
+    switch (typeString) {
+      case 'update':
+        return HealthObserverEventType.update;
+      case 'error':
+        return HealthObserverEventType.error;
+      case 'background_delivery_enabled':
+        return HealthObserverEventType.backgroundDeliveryEnabled;
+      case 'background_delivery_error':
+        return HealthObserverEventType.backgroundDeliveryError;
+      default:
+        return HealthObserverEventType.error;
+    }
+  }
+
+  @override
+  String toString() => 'HealthObserverUpdate(type: $type, dataType: $dataType, timestamp: $timestamp, error: $error)';
 }
 
 Map<String, dynamic> _serializeWorkoutRouteLocationForNative(WorkoutRouteLocation location) {

@@ -49,12 +49,29 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
             nutritionList: nutritionList
         )
     }()
-    
+
+    private lazy var healthObserver: HealthObserver = {
+        return HealthObserver(
+            healthStore: healthStore,
+            dataTypesDict: dataTypesDict
+        )
+    }()
+
     public static func register(with registrar: FlutterPluginRegistrar) {
+        // Method channel for request-response operations
         let channel = FlutterMethodChannel(
             name: "flutter_health", binaryMessenger: registrar.messenger())
         let instance = SwiftHealthPlugin()
+
+        // Initialize types BEFORE setting up observer so dataTypesDict is populated
+        instance.initializeTypes()
+
         registrar.addMethodCallDelegate(instance, channel: channel)
+
+        // Event channel for real-time health data observations
+        let eventChannel = FlutterEventChannel(
+            name: "flutter_health/observer", binaryMessenger: registrar.messenger())
+        eventChannel.setStreamHandler(instance.healthObserver)
     }
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
