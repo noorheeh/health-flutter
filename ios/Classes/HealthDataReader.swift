@@ -211,7 +211,7 @@ class HealthDataReader {
 
             if let quantitySamples = samples as? [HKQuantitySample] {
                 let dictionaries = quantitySamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "value": sample.quantity.doubleValue(
                             for: unit ?? HKUnit.internationalUnit()),
@@ -226,6 +226,10 @@ class HealthDataReader {
                         "dataUnitKey": unit?.unitString,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(dictionaries)
@@ -260,7 +264,7 @@ class HealthDataReader {
                 }
 
                 let categories = categorySamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "value": sample.value,
                         "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
@@ -273,13 +277,17 @@ class HealthDataReader {
                             : HealthConstants.RecordingMethod.automatic.rawValue,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(categories)
                 }
             } else if let workoutSamples = samples as? [HKWorkout] {
                 let dictionaries = workoutSamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "workoutActivityType": self.workoutActivityTypeMap.first(where: {
                             $0.value == sample.workoutActivityType
@@ -304,6 +312,10 @@ class HealthDataReader {
                             ? Int(sample.totalEnergyBurned!.doubleValue(for: HKUnit.kilocalorie()))
                             : 0,
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
 
                 DispatchQueue.main.async {
@@ -323,7 +335,7 @@ class HealthDataReader {
                             samplePoint.rightEarSensitivity!.doubleValue(
                                 for: HKUnit.decibelHearingLevel()))
                     }
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "frequencies": frequencies,
                         "leftEarSensitivities": leftEarSensitivities,
@@ -333,6 +345,10 @@ class HealthDataReader {
                         "source_id": sample.sourceRevision.source.bundleIdentifier,
                         "source_name": sample.sourceRevision.source.name,
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(dictionaries)
@@ -493,7 +509,7 @@ class HealthDataReader {
 
             if let quantitySamples = samples as? [HKQuantitySample] {
                 let dictionaries = quantitySamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "value": sample.quantity.doubleValue(
                             for: unit ?? HKUnit.internationalUnit()),
@@ -508,6 +524,10 @@ class HealthDataReader {
                         "dataUnitKey": unit?.unitString,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(dictionaries.first)
@@ -542,7 +562,7 @@ class HealthDataReader {
                 }
 
                 let categories = categorySamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "value": sample.value,
                         "date_from": Int(sample.startDate.timeIntervalSince1970 * 1000),
@@ -555,13 +575,17 @@ class HealthDataReader {
                             : HealthConstants.RecordingMethod.automatic.rawValue,
                         "metadata": HealthUtilities.sanitizeMetadata(sample.metadata),
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(categories.first)
                 }
             } else if let workoutSamples = samples as? [HKWorkout] {
                 let dictionaries = workoutSamples.map { sample -> NSDictionary in
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "workoutActivityType": self.workoutActivityTypeMap.first(where: {
                             $0.value == sample.workoutActivityType
@@ -586,6 +610,10 @@ class HealthDataReader {
                             ? Int(sample.totalEnergyBurned!.doubleValue(for: HKUnit.kilocalorie()))
                             : 0,
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
 
                 DispatchQueue.main.async {
@@ -605,7 +633,7 @@ class HealthDataReader {
                             samplePoint.rightEarSensitivity!.doubleValue(
                                 for: HKUnit.decibelHearingLevel()))
                     }
-                    return [
+                    var dict: [String: Any?] = [
                         "uuid": "\(sample.uuid)",
                         "frequencies": frequencies,
                         "leftEarSensitivities": leftEarSensitivities,
@@ -615,6 +643,10 @@ class HealthDataReader {
                         "source_id": sample.sourceRevision.source.bundleIdentifier,
                         "source_name": sample.sourceRevision.source.name,
                     ]
+                    if let deviceModel = self.deviceModel(from: sample) {
+                        dict["device_model"] = deviceModel
+                    }
+                    return dict as NSDictionary
                 }
                 DispatchQueue.main.async {
                     result(dictionaries.first)
@@ -1100,7 +1132,7 @@ class HealthDataReader {
                         ])
                     }
                 case .done:
-                    let dict: NSDictionary = [
+                    var dict: [String: Any?] = [
                         "uuid": "\(ecg.uuid)",
                         "voltageValues": voltageValues,
                         "averageHeartRate": ecg.averageHeartRate?
@@ -1115,8 +1147,11 @@ class HealthDataReader {
                         "source_id": ecg.sourceRevision.source.bundleIdentifier,
                         "source_name": ecg.sourceRevision.source.name,
                     ]
+                    if let deviceModel = self.deviceModel(from: ecg) {
+                        dict["device_model"] = deviceModel
+                    }
                     lock.lock()
-                    dictionaries.append(dict)
+                    dictionaries.append(dict as NSDictionary)
                     lock.unlock()
                     group.leave()
                 case .error(let e):
