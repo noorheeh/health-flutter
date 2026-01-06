@@ -53,7 +53,8 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
     private lazy var healthObserver: HealthObserver = {
         return HealthObserver(
             healthStore: healthStore,
-            dataTypesDict: dataTypesDict
+            dataTypesDict: dataTypesDict,
+            unitDict: unitDict
         )
     }()
 
@@ -204,7 +205,26 @@ public class SwiftHealthPlugin: NSObject, FlutterPlugin {
                                     message: "Error deleting data by UUID: \(error.localizedDescription)",
                                     details: nil))
             }
-            
+
+        // MARK: - Observer Methods
+
+        case "registerBackgroundTypes":
+            if let args = call.arguments as? [String: Any],
+               let types = args["types"] as? [String] {
+                HealthBackgroundHandler.saveRegisteredTypes(types)
+                result(true)
+            } else {
+                result(FlutterError(code: "INVALID_ARGUMENTS", message: "Expected types array", details: nil))
+            }
+
+        case "getPendingBackgroundUpdates":
+            let updates = HealthBackgroundHandler.getPendingUpdates()
+            result(updates)
+
+        case "clearPendingUpdates":
+            HealthBackgroundHandler.clearPendingUpdates()
+            result(true)
+
         default:
             result(FlutterMethodNotImplemented)
         }

@@ -1612,40 +1612,58 @@ class Health {
   /// Observe real-time changes to health data (iOS only).
   ///
   /// Returns a stream of [HealthObserverUpdate] events when health data changes.
-  /// This uses HKObserverQuery on iOS to receive notifications when new health data
-  /// is available. You must still call [getHealthDataFromTypes] to fetch the actual data.
+  /// Uses HKAnchoredObjectQuery on iOS to receive notifications with optional
+  /// actual data samples included.
   ///
   /// **Important:** This feature is only available on iOS. On Android, the stream will
   /// emit an error and close.
   ///
   /// Parameters:
   ///  * [types] - List of [HealthDataType] to observe for changes
-  ///  * [enableBackground] - Whether to receive updates when app is in background (iOS only)
+  ///  * [enableBackground] - Whether to receive updates when app is in background (iOS only).
   ///    Requires background modes to be enabled in your iOS app.
+  ///  * [includeData] - If true, includes actual health data samples in the update event.
+  ///    This eliminates the need to call [getHealthDataFromTypes] separately.
   ///
   /// Returns a Stream of [HealthObserverUpdate] events containing:
   ///  * [type] - The event type (update, error, background_delivery_enabled, etc.)
   ///  * [dataType] - The health data type that changed
   ///  * [timestamp] - When the change occurred
+  ///  * [addedSamples] - New samples (when includeData is true)
+  ///  * [deletedUUIDs] - UUIDs of deleted samples (when includeData is true)
   ///  * [error] - Error message if type is 'error'
   ///
-  /// Example:
+  /// Example (basic - notification only):
   /// ```dart
-  /// final health = Health();
+  /// health.observeHealthData(
+  ///   types: [HealthDataType.STEPS],
+  /// ).listen((update) {
+  ///   if (update.type == HealthObserverEventType.update) {
+  ///     // Manually fetch data
+  ///     final data = await health.getHealthDataFromTypes(...);
+  ///   }
+  /// });
+  /// ```
   ///
+  /// Example (with data - recommended):
+  /// ```dart
   /// health.observeHealthData(
   ///   types: [HealthDataType.STEPS, HealthDataType.HEART_RATE],
   ///   enableBackground: true,
+  ///   includeData: true,
   /// ).listen((update) {
   ///   if (update.type == HealthObserverEventType.update) {
-  ///     print('New ${update.dataType} data available');
-  ///     // Fetch the actual data using getHealthDataFromTypes()
+  ///     // Data is already included!
+  ///     for (final sample in update.addedSamples ?? []) {
+  ///       print('New: ${sample['value']} at ${sample['date_from']}');
+  ///     }
   ///   }
   /// });
   /// ```
   Stream<HealthObserverUpdate> observeHealthData({
     required List<HealthDataType> types,
     bool enableBackground = false,
+    bool includeData = false,
   }) {
     if (!Platform.isIOS) {
       return Stream.error(
@@ -1656,15 +1674,15 @@ class Health {
       );
     }
 
-    // Cancel any existing observation to avoid multiple native subscriptions
+    // Cancel any existing observation
     stopObservingHealthData();
 
     final dataTypeKeys = types.map((type) => type.name).toList();
 
-    final nativeStream = _observerChannel
-        .receiveBroadcastStream({
+    final nativeStream = _observerChannel.receiveBroadcastStream({
       'dataTypeKeys': dataTypeKeys,
       'enableBackground': enableBackground,
+      'includeData': includeData,
     }).map(
       (event) => HealthObserverUpdate._fromMap(
         Map<String, dynamic>.from(event as Map),
@@ -1699,8 +1717,6 @@ class Health {
   ///
   /// Call this when you no longer need to receive health data updates.
   /// This cancels the observation stream and cleans up native resources.
-  ///
-  /// Note: You can also cancel the stream subscription directly if you kept a reference to it.
   void stopObservingHealthData() {
     _observerSubscription?.cancel();
     _observerSubscription = null;
@@ -1708,6 +1724,76 @@ class Health {
     final controller = _observerController;
     _observerController = null;
     controller?.close();
+  }
+
+  /// Register health data types for persistent background observation (iOS only).
+  ///
+  /// These types will be observed even after app restart. Call this once during
+  /// app setup. To receive updates when the app is terminated, you must also
+  /// call `HealthBackgroundHandler.registerPersistentObservers()` in your
+  /// iOS AppDelegate.
+  ///
+  /// Example:
+  /// ```dart
+  /// await health.registerBackgroundTypes(
+  ///   types: [HealthDataType.STEPS, HealthDataType.HEART_RATE],
+  /// );
+  /// ```
+  Future<bool> registerBackgroundTypes({required List<HealthDataType> types}) async {
+    if (!Platform.isIOS) return false;
+
+    try {
+      final typeKeys = types.map((t) => t.name).toList();
+      final result = await _channel.invokeMethod<bool>('registerBackgroundTypes', {'types': typeKeys});
+      return result ?? false;
+    } catch (e) {
+      debugPrint('$runtimeType - Exception in registerBackgroundTypes(): $e');
+      return false;
+    }
+  }
+
+  /// Get pending background updates that occurred while the app was terminated (iOS only).
+  ///
+  /// Call this on app startup to retrieve health updates that were received
+  /// while the app was not running.
+  ///
+  /// Example:
+  /// ```dart
+  /// final pending = await health.getPendingBackgroundUpdates();
+  /// for (final update in pending) {
+  ///   print('Missed update: ${update.dataType} at ${update.timestamp}');
+  /// }
+  /// await health.clearPendingUpdates();
+  /// ```
+  Future<List<HealthObserverUpdate>> getPendingBackgroundUpdates() async {
+    if (!Platform.isIOS) return [];
+
+    try {
+      final result = await _channel.invokeMethod<List<dynamic>>('getPendingBackgroundUpdates');
+      if (result == null) return [];
+
+      return result
+          .map((item) => HealthObserverUpdate._fromMap(Map<String, dynamic>.from(item as Map)))
+          .toList();
+    } catch (e) {
+      debugPrint('$runtimeType - Exception in getPendingBackgroundUpdates(): $e');
+      return [];
+    }
+  }
+
+  /// Clear all pending background updates (iOS only).
+  ///
+  /// Call this after processing pending updates retrieved via [getPendingBackgroundUpdates].
+  Future<bool> clearPendingUpdates() async {
+    if (!Platform.isIOS) return false;
+
+    try {
+      final result = await _channel.invokeMethod<bool>('clearPendingUpdates');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('$runtimeType - Exception in clearPendingUpdates(): $e');
+      return false;
+    }
   }
 }
 
@@ -1731,7 +1817,7 @@ class HealthObserverUpdate {
   /// The type of event
   final HealthObserverEventType type;
 
-  /// The health data type that changed (for update, error, and background events)
+  /// The health data type that changed
   final HealthDataType? dataType;
 
   /// Timestamp when the change occurred (milliseconds since epoch)
@@ -1740,11 +1826,32 @@ class HealthObserverUpdate {
   /// Error message (only present when type is error or backgroundDeliveryError)
   final String? error;
 
+  /// Number of samples added (available when type is update)
+  final int? addedCount;
+
+  /// Number of samples deleted (available when type is update)
+  final int? deletedCount;
+
+  /// Actual sample data (available when includeData is true)
+  /// Each map contains: uuid, date_from, date_to, value, unit, source_id, source_name
+  final List<Map<String, dynamic>>? addedSamples;
+
+  /// UUIDs of deleted samples (available when includeData is true)
+  final List<String>? deletedUUIDs;
+
+  /// Whether this update was received while app was in background/terminated
+  final bool isBackgroundUpdate;
+
   HealthObserverUpdate._({
     required this.type,
     this.dataType,
     this.timestamp,
     this.error,
+    this.addedCount,
+    this.deletedCount,
+    this.addedSamples,
+    this.deletedUUIDs,
+    this.isBackgroundUpdate = false,
   });
 
   factory HealthObserverUpdate._fromMap(Map<String, dynamic> map) {
@@ -1754,16 +1861,26 @@ class HealthObserverUpdate {
     // Parse event type
     final eventType = _parseEventType(typeString);
 
-    // Parse data type if available
+    // Parse data type
     HealthDataType? dataType;
     if (dataTypeKey != null) {
       try {
-        dataType = HealthDataType.values.firstWhere(
-          (type) => type.name == dataTypeKey,
-        );
-      } catch (_) {
-        // If parsing fails, dataType remains null
-      }
+        dataType = HealthDataType.values.firstWhere((t) => t.name == dataTypeKey);
+      } catch (_) {}
+    }
+
+    // Parse added samples
+    List<Map<String, dynamic>>? addedSamples;
+    if (map['addedSamples'] != null) {
+      addedSamples = (map['addedSamples'] as List)
+          .map((s) => Map<String, dynamic>.from(s as Map))
+          .toList();
+    }
+
+    // Parse deleted UUIDs
+    List<String>? deletedUUIDs;
+    if (map['deletedUUIDs'] != null) {
+      deletedUUIDs = (map['deletedUUIDs'] as List).cast<String>();
     }
 
     return HealthObserverUpdate._(
@@ -1771,6 +1888,11 @@ class HealthObserverUpdate {
       dataType: dataType,
       timestamp: map['timestamp'] as int?,
       error: map['error'] as String?,
+      addedCount: map['addedCount'] as int?,
+      deletedCount: map['deletedCount'] as int?,
+      addedSamples: addedSamples,
+      deletedUUIDs: deletedUUIDs,
+      isBackgroundUpdate: map['isBackgroundUpdate'] as bool? ?? false,
     );
   }
 
@@ -1789,8 +1911,23 @@ class HealthObserverUpdate {
     }
   }
 
+  /// Check if the activity time is backdated (happened before a threshold)
+  bool isBackdated({Duration threshold = const Duration(hours: 1)}) {
+    if (addedSamples == null || addedSamples!.isEmpty) return false;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final sample in addedSamples!) {
+      final dateFrom = sample['date_from'] as int?;
+      if (dateFrom != null && (now - dateFrom) > threshold.inMilliseconds) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @override
-  String toString() => 'HealthObserverUpdate(type: $type, dataType: $dataType, timestamp: $timestamp, error: $error)';
+  String toString() =>
+      'HealthObserverUpdate(type: $type, dataType: $dataType, addedCount: $addedCount, deletedCount: $deletedCount, isBackground: $isBackgroundUpdate)';
 }
 
 Map<String, dynamic> _serializeWorkoutRouteLocationForNative(WorkoutRouteLocation location) {
